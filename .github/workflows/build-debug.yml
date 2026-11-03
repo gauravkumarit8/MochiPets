@@ -33,8 +33,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # The ubuntu-latest runner already ships Android SDK 34 and build-tools 34.
+      # Do not use android-actions/setup-android: it tries to install the removed
+      # 'tools' package and fails. We only make sure the licenses are accepted.
+      - name: Accept Android SDK licenses
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | head -n1)"
+          echo "Using $SDKM"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" "platforms;android-34" "build-tools;34.0.0" > /dev/null || true
 
       - name: Set up Gradle (with cache)
         uses: gradle/actions/setup-gradle@v4
