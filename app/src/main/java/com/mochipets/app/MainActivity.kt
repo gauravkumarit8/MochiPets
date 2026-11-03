@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.res.ColorStateList
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -19,9 +20,11 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 
 class MainActivity : Activity() {
@@ -33,6 +36,13 @@ class MainActivity : Activity() {
     private lateinit var taglineText: TextView
     private lateinit var permissionButton: Button
     private lateinit var toggleButton: Button
+    private lateinit var levelText: TextView
+    private lateinit var xpBar: ProgressBar
+    private lateinit var happyText: TextView
+    private lateinit var happyBar: ProgressBar
+    private lateinit var dailyButton: Button
+    private lateinit var treatButton: Button
+    private var statsTick = 0
 
     private val previews = mutableListOf<Preview>()
     private val handler = Handler(Looper.getMainLooper())
@@ -40,6 +50,8 @@ class MainActivity : Activity() {
     private val previewTick = object : Runnable {
         override fun run() {
             previewTime += 0.04f
+            statsTick++
+            if (statsTick % 25 == 0) refreshStats()
             for (p in previews) {
                 p.view.animTime = previewTime
                 p.view.invalidate()
@@ -120,6 +132,38 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(12))
         }
         root.addView(taglineText)
+
+        // ---- stats card ----
+        val statsCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(Color.WHITE)
+                setStroke(dp(1), Color.parseColor("#F0D6E0"))
+            }
+        }
+        levelText = TextView(this).apply {
+            textSize = 16f
+            setTextColor(ink)
+        }
+        statsCard.addView(levelText)
+        xpBar = progressBar()
+        statsCard.addView(xpBar)
+        happyText = TextView(this).apply {
+            textSize = 14f
+            setTextColor(ink)
+            setPadding(0, dp(10), 0, 0)
+        }
+        statsCard.addView(happyText)
+        happyBar = progressBar()
+        statsCard.addView(happyBar)
+        dailyButton = Button(this).apply { setOnClickListener { claimDaily() } }
+        statsCard.addView(dailyButton)
+        treatButton = Button(this).apply { setOnClickListener { giveTreat() } }
+        statsCard.addView(treatButton)
+        root.addView(statsCard)
+        root.addView(View(this), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(12)))
 
         permissionButton = Button(this).apply {
             text = "Allow display over other apps"
@@ -203,6 +247,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshUi()
+        refreshStats()
         handler.removeCallbacks(previewTick)
         handler.post(previewTick)
     }
@@ -219,6 +264,7 @@ class MainActivity : Activity() {
         prefs.edit().putString(Prefs.KEY_CHARACTER, type.id).apply()
         refreshPicker()
         refreshUi()
+        refreshStats()
         applyIfRunning()
     }
 
@@ -233,6 +279,65 @@ class MainActivity : Activity() {
             }
         }
         taglineText.text = selected.tagline
+    }
+
+    private fun progressBar(): ProgressBar {
+        val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
+        bar.progressTintList = ColorStateList.valueOf(pink)
+        val lp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(10))
+        lp.topMargin = dp(6)
+        bar.layoutParams = lp
+        return bar
+    }
+
+    private fun refreshStats() {
+        val now = System.currentTimeMillis()
+        val type = selectedCharacter()
+        val s = PetStats.snapshot(prefs, type.id, now)
+        levelText.text = "${type.displayName}  -  Level ${s.level}  -  ${s.xpIntoLevel}/${s.xpForNextLevel} XP"
+        xpBar.max = s.xpForNextLevel
+        xpBar.progress = s.xpIntoLevel
+        happyText.text = "Happiness: ${s.happiness}%  (${PetStats.moodWord(s.happiness)})"
+        happyBar.max = 100
+        happyBar.progress = s.happiness
+
+        val d = PetStats.daily(prefs, now)
+        if (d.claimedToday) {
+            dailyButton.text = "Daily reward claimed (streak ${d.streak})"
+            dailyButton.isEnabled = false
+        } else {
+            dailyButton.text = "Claim daily reward (streak ${d.streak + 1})"
+            dailyButton.isEnabled = true
+        }
+
+        val left = PetStats.treatCooldownLeftMs(prefs, now)
+        if (left > 0L) {
+            treatButton.text = "Treat ready in ${(left + 59_999L) / 60_000L} min"
+            treatButton.isEnabled = false
+        } else {
+            treatButton.text = "Give a treat (+happiness)"
+            treatButton.isEnabled = true
+        }
+    }
+
+    private fun claimDaily() {
+        val type = selectedCharacter()
+        val claim = PetStats.claimDaily(prefs, type.id, System.currentTimeMillis()) ?: return
+        var msg = "+${claim.xp} XP and a happier ${type.displayName}! Streak: ${claim.streak}"
+        if (claim.levelUp > 0) msg += "  Level ${claim.levelUp}!"
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+        refreshStats()
+    }
+
+    private fun giveTreat() {
+        val type = selectedCharacter()
+        val result = PetStats.giveTreat(prefs, type.id, System.currentTimeMillis())
+        if (result >= 0) {
+            var msg = "${type.displayName} loved the treat!"
+            if (result > 0) msg += "  Level $result!"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+        }
+        refreshStats()
     }
 
     private fun refreshUi() {

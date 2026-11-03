@@ -39,6 +39,9 @@ class PetBrain(
     var sleepiness: Float = 0f
     var speedScale: Float = 1f
 
+    /** 0.7 (sad) .. 1.2 (happy). Set by the service from the pet's happiness. */
+    var moodSpeed: Float = 1f
+
     private var stateDuration = 3f
     private var vx = 0f
     private var vy = 0f
@@ -113,7 +116,7 @@ class PetBrain(
         when (state) {
             PetState.WALK -> {
                 val dir = if (facingRight) 1f else -1f
-                x += dir * 40f * density * speedScale * character.speedMul * dt
+                x += dir * 40f * density * speedScale * character.speedMul * moodSpeed * dt
                 if (x <= 0f) {
                     x = 0f
                     if (character.canClimb && Random.nextFloat() < 0.4f) startClimb(true) else facingRight = true
@@ -125,7 +128,7 @@ class PetBrain(
             }
             PetState.CLIMB -> {
                 x = if (surface == 1) 0f else maxX
-                y -= 55f * density * speedScale * dt
+                y -= 55f * density * speedScale * moodSpeed * dt
                 if (y <= topY) {
                     y = topY
                     surface = 3

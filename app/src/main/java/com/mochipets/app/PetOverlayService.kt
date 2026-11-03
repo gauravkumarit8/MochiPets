@@ -23,6 +23,7 @@ import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.ViewConfiguration
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import java.util.Calendar
 
@@ -42,6 +43,9 @@ class PetOverlayService : Service() {
     private lateinit var params: WindowManager.LayoutParams
     private var petView: PetView? = null
     private var brain: PetBrain? = null
+    private var currentCharacter: CharacterType = CharacterType.MOCHI
+    private var minutesRunning = 0
+    private val statsPrefs by lazy { getSharedPreferences(Prefs.NAME, MODE_PRIVATE) }
 
     private var running = false
     private var lastFrameNanos = 0L
@@ -82,8 +86,16 @@ class PetOverlayService : Service() {
                 animTime += dt
 
                 if (frameTimeNanos - lastMoodNanos > 60_000_000_000L) {
+                    val firstTick = lastMoodNanos == 0L
                     lastMoodNanos = frameTimeNanos
-                    b.sleepiness = computeSleepiness()
+                    applyMood(b)
+                    if (!firstTick) {
+                        minutesRunning++
+                        if (minutesRunning % 5 == 0) {
+                            val lvl = PetStats.onTimeTick(statsPrefs, currentCharacter.id, System.currentTimeMillis())
+                            if (lvl > 0) showLevelUp(lvl)
+                        }
+                    }
                 }
 
                 b.update(dt)
@@ -217,8 +229,10 @@ class PetOverlayService : Service() {
         val screen = screenSize()
 
         val b = PetBrain(sizePx, density, screen.first, screen.second, (72 * density).toInt(), character)
+        currentCharacter = character
+        minutesRunning = 0
         b.speedScale = speed
-        b.sleepiness = computeSleepiness()
+        applyMood(b)
         brain = b
 
         val v = PetView(this)
@@ -315,6 +329,7 @@ class PetOverlayService : Service() {
                     b.release((vt?.xVelocity ?: 0f) * 0.7f, (vt?.yVelocity ?: 0f) * 0.7f)
                 } else if (e.actionMasked == MotionEvent.ACTION_UP) {
                     b.tap()
+                    onPetTapped()
                 }
                 vt?.recycle()
                 velocityTracker = null
@@ -325,12 +340,31 @@ class PetOverlayService : Service() {
         return false
     }
 
+    // ---------- stats ----------
+
+    private fun onPetTapped() {
+        val lvl = PetStats.onTap(statsPrefs, currentCharacter.id, System.currentTimeMillis())
+        if (lvl > 0) showLevelUp(lvl)
+    }
+
+    private fun showLevelUp(level: Int) {
+        Toast.makeText(this, "${currentCharacter.displayName} reached level $level!", Toast.LENGTH_LONG).show()
+    }
+
+    private fun applyMood(b: PetBrain) {
+        b.sleepiness = computeSleepiness()
+        val happiness = PetStats.snapshot(statsPrefs, currentCharacter.id, System.currentTimeMillis()).happiness
+        b.moodSpeed = PetStats.speedFactor(happiness)
+    }
+
     // ---------- mood ----------
 
     private fun computeSleepiness(): Float {
         var s = 0f
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         if (hour >= 22 || hour < 6) s += 0.6f
+        val happiness = PetStats.snapshot(statsPrefs, currentCharacter.id, System.currentTimeMillis()).happiness
+        if (happiness < 30) s += 0.25f
         val bi = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         if (bi != null) {
             val level = bi.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
