@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Mochi Pets</string>
     <string name="channel_name">Pet on screen</string>
-    <string name="notif_title">Mochi is on your screen</string>
+    <string name="notif_title">Your pet is on your screen</string>
     <string name="notif_text">Tap to open settings</string>
     <string name="notif_stop">Stop</string>
 </resources>

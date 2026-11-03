@@ -21,6 +21,10 @@ class PetView(context: Context) : View(context) {
     var animTime: Float = 0f
     var surface: Int = 0
     var squash: Float = 0f
+    var character: CharacterType = CharacterType.MOCHI
+
+    private val bholuRenderer = BholuRenderer()
+    private val jellyRenderer = JellyRenderer()
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -40,6 +44,36 @@ class PetView(context: Context) : View(context) {
     private var lw = 3f
 
     override fun onDraw(canvas: Canvas) {
+        when (character) {
+            CharacterType.MOCHI -> drawMochi(canvas)
+            CharacterType.BHOLU -> drawWithRenderer(canvas, bholuRenderer)
+            CharacterType.JELLY -> drawWithRenderer(canvas, jellyRenderer)
+        }
+    }
+
+    private fun drawWithRenderer(canvas: Canvas, r: PetRenderer) {
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val dragged = state == PetState.DRAGGED || state == PetState.FALL
+        if (!dragged && surface == 0) {
+            fill.color = cShadow
+            rect.set(w * 0.14f, h * 0.90f, w * 0.86f, h * 0.99f)
+            canvas.drawOval(rect, fill)
+        }
+        canvas.save()
+        when (surface) {
+            1 -> canvas.rotate(90f, w / 2f, h / 2f)
+            2 -> canvas.rotate(-90f, w / 2f, h / 2f)
+            3 -> canvas.rotate(180f, w / 2f, h / 2f)
+        }
+        if (!facingRight) canvas.scale(-1f, 1f, w / 2f, h / 2f)
+        canvas.scale(1f + 0.14f * squash, 1f - 0.2f * squash, w / 2f, h * 0.9f)
+        r.draw(canvas, w, h, state, animTime)
+        canvas.restore()
+        r.drawEffects(canvas, w, h, state, animTime, facingRight)
+    }
+
+    private fun drawMochi(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
         val t = animTime

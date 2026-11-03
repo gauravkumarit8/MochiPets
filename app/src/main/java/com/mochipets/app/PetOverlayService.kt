@@ -212,15 +212,17 @@ class PetOverlayService : Service() {
         val sizeDp = prefs.getInt(Prefs.KEY_SIZE_DP, Prefs.DEFAULT_SIZE_DP)
         val speed = prefs.getInt(Prefs.KEY_SPEED_PCT, Prefs.DEFAULT_SPEED_PCT) / 100f
         val saver = prefs.getBoolean(Prefs.KEY_SAVER, false)
+        val character = CharacterType.fromId(prefs.getString(Prefs.KEY_CHARACTER, null))
         val sizePx = (sizeDp * density).toInt()
         val screen = screenSize()
 
-        val b = PetBrain(sizePx, density, screen.first, screen.second, (72 * density).toInt())
+        val b = PetBrain(sizePx, density, screen.first, screen.second, (72 * density).toInt(), character)
         b.speedScale = speed
         b.sleepiness = computeSleepiness()
         brain = b
 
         val v = PetView(this)
+        v.character = character
         petView = v
 
         params = WindowManager.LayoutParams(

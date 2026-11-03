@@ -6,11 +6,16 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.LinearLayout
@@ -21,17 +26,36 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : Activity() {
 
+    private class Preview(val type: CharacterType, val view: PetView, val card: LinearLayout)
+
     private lateinit var prefs: SharedPreferences
     private lateinit var statusText: TextView
+    private lateinit var taglineText: TextView
     private lateinit var permissionButton: Button
     private lateinit var toggleButton: Button
+
+    private val previews = mutableListOf<Preview>()
+    private val handler = Handler(Looper.getMainLooper())
+    private var previewTime = 0f
+    private val previewTick = object : Runnable {
+        override fun run() {
+            previewTime += 0.04f
+            for (p in previews) {
+                p.view.animTime = previewTime
+                p.view.invalidate()
+            }
+            handler.postDelayed(this, 40L)
+        }
+    }
+
+    private val ink = Color.parseColor("#3A2A33")
+    private val pink = Color.parseColor("#FF8FB1")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
 
         val pad = dp(20)
-        val ink = Color.parseColor("#3A2A33")
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad * 2, pad, pad)
@@ -47,9 +71,55 @@ class MainActivity : Activity() {
         statusText = TextView(this).apply {
             textSize = 16f
             setTextColor(ink)
-            setPadding(0, dp(8), 0, dp(16))
+            setPadding(0, dp(8), 0, dp(12))
         }
         root.addView(statusText)
+
+        // ---- pet picker ----
+        root.addView(TextView(this).apply {
+            text = "Choose your pet"
+            textSize = 18f
+            setTextColor(ink)
+        })
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(8), 0, 0)
+        }
+        for (type in CharacterType.values()) {
+            val petView = PetView(this).apply {
+                character = type
+                state = PetState.WALK
+                facingRight = true
+            }
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(6), dp(8), dp(6), dp(8))
+                setOnClickListener { selectCharacter(type) }
+            }
+            card.addView(petView, LinearLayout.LayoutParams(dp(84), dp(84)))
+            card.addView(TextView(this).apply {
+                text = type.displayName
+                textSize = 14f
+                gravity = Gravity.CENTER
+                setTextColor(ink)
+            })
+            val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            lp.setMargins(dp(4), 0, dp(4), 0)
+            row.addView(card, lp)
+            previews.add(Preview(type, petView, card))
+        }
+        root.addView(row)
+
+        taglineText = TextView(this).apply {
+            textSize = 14f
+            setTextColor(Color.parseColor("#7A6A73"))
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(12))
+        }
+        root.addView(taglineText)
 
         permissionButton = Button(this).apply {
             text = "Allow display over other apps"
@@ -121,29 +191,61 @@ class MainActivity : Activity() {
         })
 
         root.addView(TextView(this).apply {
-            text = "Tip: tap Mochi for a reaction, drag and throw her. She naps at night and when the battery is low."
+            text = "Tip: tap your pet for a reaction, drag and throw it. Pets nap at night and when the battery is low."
             setTextColor(Color.parseColor("#7A6A73"))
             setPadding(0, dp(24), 0, 0)
         })
 
         setContentView(ScrollView(this).apply { addView(root) })
+        refreshPicker()
     }
 
     override fun onResume() {
         super.onResume()
         refreshUi()
+        handler.removeCallbacks(previewTick)
+        handler.post(previewTick)
+    }
+
+    override fun onPause() {
+        handler.removeCallbacks(previewTick)
+        super.onPause()
+    }
+
+    private fun selectedCharacter(): CharacterType =
+        CharacterType.fromId(prefs.getString(Prefs.KEY_CHARACTER, null))
+
+    private fun selectCharacter(type: CharacterType) {
+        prefs.edit().putString(Prefs.KEY_CHARACTER, type.id).apply()
+        refreshPicker()
+        refreshUi()
+        applyIfRunning()
+    }
+
+    private fun refreshPicker() {
+        val selected = selectedCharacter()
+        for (p in previews) {
+            val isSelected = p.type == selected
+            p.card.background = GradientDrawable().apply {
+                cornerRadius = dp(16).toFloat()
+                setColor(if (isSelected) Color.parseColor("#FFE3EC") else Color.TRANSPARENT)
+                setStroke(dp(2), if (isSelected) pink else Color.TRANSPARENT)
+            }
+        }
+        taglineText.text = selected.tagline
     }
 
     private fun refreshUi() {
         val canDraw = Settings.canDrawOverlays(this)
         val running = PetOverlayService.isRunning
+        val name = selectedCharacter().displayName
         permissionButton.visibility = if (canDraw) View.GONE else View.VISIBLE
         toggleButton.isEnabled = canDraw
-        toggleButton.text = if (running) "Stop Mochi" else "Start Mochi"
+        toggleButton.text = if (running) "Stop pet" else "Start pet"
         statusText.text = when {
-            !canDraw -> "Mochi needs permission to appear over other apps. We never read your screen."
-            running -> "Mochi is on your screen. Go to your home screen and say hi!"
-            else -> "Ready. Tap Start to bring Mochi to your screen."
+            !canDraw -> "Your pet needs permission to appear over other apps. We never read your screen."
+            running -> "$name is on your screen. Go to your home screen and say hi!"
+            else -> "Ready. Pick a pet, then tap Start."
         }
     }
 

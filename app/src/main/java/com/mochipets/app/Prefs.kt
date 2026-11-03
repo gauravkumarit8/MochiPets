@@ -5,6 +5,7 @@ object Prefs {
     const val KEY_SIZE_DP = "size_dp"
     const val KEY_SPEED_PCT = "speed_pct"
     const val KEY_SAVER = "battery_saver"
+    const val KEY_CHARACTER = "character"
     const val DEFAULT_SIZE_DP = 110
     const val DEFAULT_SPEED_PCT = 100
 }

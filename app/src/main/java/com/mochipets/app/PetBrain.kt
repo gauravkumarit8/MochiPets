@@ -13,7 +13,8 @@ class PetBrain(
     private val density: Float,
     private var screenW: Int,
     private var screenH: Int,
-    private val floorMargin: Int
+    private val floorMargin: Int,
+    private val character: CharacterType = CharacterType.MOCHI
 ) {
     var state: PetState = PetState.IDLE
         private set
@@ -112,13 +113,13 @@ class PetBrain(
         when (state) {
             PetState.WALK -> {
                 val dir = if (facingRight) 1f else -1f
-                x += dir * 40f * density * speedScale * dt
+                x += dir * 40f * density * speedScale * character.speedMul * dt
                 if (x <= 0f) {
                     x = 0f
-                    if (Random.nextFloat() < 0.4f) startClimb(true) else facingRight = true
+                    if (character.canClimb && Random.nextFloat() < 0.4f) startClimb(true) else facingRight = true
                 } else if (x >= maxX) {
                     x = maxX
-                    if (Random.nextFloat() < 0.4f) startClimb(false) else facingRight = false
+                    if (character.canClimb && Random.nextFloat() < 0.4f) startClimb(false) else facingRight = false
                 }
                 y = floorY
             }
