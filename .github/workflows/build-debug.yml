@@ -1,0 +1,78 @@
+name: Build Debug APK
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - "**.md"
+      - "patches/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Auto-incrementing build number: +1 on every workflow run.
+      BUILD_NUMBER: ${{ github.run_number }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle (with cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug -PbuildNumber="$BUILD_NUMBER" --stacktrace
+
+      - name: Name the APK with its version
+        run: |
+          VERSION_BASE=$(grep '^VERSION_BASE=' version.properties | cut -d= -f2 | tr -d '\r')
+          VERSION="${VERSION_BASE}.${BUILD_NUMBER}"
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/MochiPets-debug-v${VERSION}.apk"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          {
+            echo "### Mochi Pets debug build"
+            echo ""
+            echo "- Version: \`${VERSION}\` (versionCode ${BUILD_NUMBER})"
+            echo "- Commit: \`${GITHUB_SHA::7}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MochiPets-debug-v${{ env.VERSION }}
+          path: dist/*.apk
+          retention-days: 30
+
+      - name: Publish APK as a pre-release (easy download on your phone)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "debug-${BUILD_NUMBER}" --yes --cleanup-tag >/dev/null 2>&1 || true
+          gh release create "debug-${BUILD_NUMBER}" dist/*.apk \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Debug v${VERSION}" \
+            --notes "Automated debug build ${BUILD_NUMBER} from commit ${GITHUB_SHA::7}."

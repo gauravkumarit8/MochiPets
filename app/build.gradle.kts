@@ -1,7 +1,16 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// Version comes from version.properties (base) plus -PbuildNumber=<n> (set by GitHub Actions).
+val versionProps = Properties().apply {
+    rootProject.file("version.properties").inputStream().use { load(it) }
+}
+val versionBase: String = versionProps.getProperty("VERSION_BASE", "0.1")
+val buildNumber: Int = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 0
 
 android {
     namespace = "com.mochipets.app"
@@ -11,8 +20,8 @@ android {
         applicationId = "com.mochipets.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = maxOf(buildNumber, 1)
+        versionName = "$versionBase.$buildNumber"
     }
 
     buildTypes {
