@@ -3,6 +3,7 @@ package com.mochipets.app
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
@@ -290,6 +291,18 @@ class MainActivity : Activity() {
             setPadding(0, dp(24), 0, 0)
         })
 
+        root.addView(Button(this).apply {
+            text = "Pet not showing? Get help"
+            setOnClickListener { showHelp() }
+        })
+        root.addView(TextView(this).apply {
+            text = "Mochi Pets version " + appVersion()
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#A89AA2"))
+            setPadding(0, dp(12), 0, 0)
+        })
+
         // Android 15+ draws apps edge to edge: keep the content clear of the system bars.
         val scroll = ScrollView(this).apply {
             clipToPadding = false
@@ -304,6 +317,7 @@ class MainActivity : Activity() {
         refreshPicker()
 
         ads.start()
+        if (!prefs.getBoolean(Prefs.KEY_WELCOME_SEEN, false)) showWelcome()
     }
 
     override fun onResume() {
@@ -319,6 +333,52 @@ class MainActivity : Activity() {
     override fun onPause() {
         handler.removeCallbacks(previewTick)
         super.onPause()
+    }
+
+    private fun appVersion(): String {
+        return try {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
+        } catch (e: Exception) {
+            "?"
+        }
+    }
+
+    /** Shown once, the first time the app is opened. */
+    private fun showWelcome() {
+        AlertDialog.Builder(this)
+            .setTitle("Welcome to Mochi Pets")
+            .setMessage(
+                "Your pet lives on top of your screen.\n\n" +
+                    "1. Allow Display over other apps, so your pet can appear.\n" +
+                    "2. Pick a pet and tap Start pet.\n\n" +
+                    "We never read, record or capture your screen. " +
+                    "Ads are shown only inside this app, and only when you choose to watch one to unlock a pet."
+            )
+            .setPositiveButton("Got it", null)
+            .setOnDismissListener { prefs.edit().putBoolean(Prefs.KEY_WELCOME_SEEN, true).apply() }
+            .show()
+    }
+
+    private fun showHelp() {
+        AlertDialog.Builder(this)
+            .setTitle("Pet not showing?")
+            .setMessage(
+                "- Make sure Display over other apps is allowed for Mochi Pets.\n\n" +
+                    "- Allow notifications, so you can see the notification with the Stop button.\n\n" +
+                    "- If the pet disappears after a while (common on Samsung, Xiaomi, Oppo, Vivo and Realme phones), " +
+                    "open App settings, then Battery, and choose Unrestricted. Also lock the app in the recent apps screen.\n\n" +
+                    "- If the permission switch is greyed out: open App settings, tap the three-dot menu and choose " +
+                    "Allow restricted settings.\n\n" +
+                    "- Still stuck? Tap Stop pet, then Start pet again."
+            )
+            .setPositiveButton("Open app settings") { _: DialogInterface, _: Int ->
+                startActivity(
+                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+                )
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     @Suppress("DEPRECATION")

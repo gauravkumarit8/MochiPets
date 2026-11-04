@@ -7,6 +7,7 @@ object Prefs {
     const val KEY_SAVER = "battery_saver"
     const val KEY_CHARACTER = "character"
     const val KEY_ROAM = "roam"
+    const val KEY_WELCOME_SEEN = "welcome_seen"
     const val DEFAULT_SIZE_DP = 110
     const val DEFAULT_SPEED_PCT = 100
 }
