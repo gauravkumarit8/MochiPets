@@ -224,7 +224,8 @@ class PetOverlayService : Service() {
         val sizeDp = prefs.getInt(Prefs.KEY_SIZE_DP, Prefs.DEFAULT_SIZE_DP)
         val speed = prefs.getInt(Prefs.KEY_SPEED_PCT, Prefs.DEFAULT_SPEED_PCT) / 100f
         val saver = prefs.getBoolean(Prefs.KEY_SAVER, false)
-        val character = CharacterType.fromId(prefs.getString(Prefs.KEY_CHARACTER, null))
+        var character = CharacterType.fromId(prefs.getString(Prefs.KEY_CHARACTER, null))
+        if (!Unlocks.isUnlocked(prefs, character)) character = CharacterType.MOCHI
         val sizePx = (sizeDp * density).toInt()
         val screen = screenSize()
 

@@ -2,10 +2,11 @@ package com.mochipets.app
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.res.ColorStateList
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -17,6 +18,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.LinearLayout
@@ -29,13 +31,20 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : Activity() {
 
-    private class Preview(val type: CharacterType, val view: PetView, val card: LinearLayout)
+    private class Preview(
+        val type: CharacterType,
+        val view: PetView,
+        val card: LinearLayout,
+        val label: TextView
+    )
 
     private lateinit var prefs: SharedPreferences
+    private lateinit var ads: AdsManager
     private lateinit var statusText: TextView
     private lateinit var taglineText: TextView
     private lateinit var permissionButton: Button
     private lateinit var toggleButton: Button
+    private lateinit var privacyButton: Button
     private lateinit var levelText: TextView
     private lateinit var xpBar: ProgressBar
     private lateinit var happyText: TextView
@@ -66,6 +75,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = getSharedPreferences(Prefs.NAME, MODE_PRIVATE)
+        ads = AdsManager(this)
+        ads.onStateChanged = {
+            refreshPicker()
+            refreshUi()
+        }
 
         val pad = dp(20)
         val root = LinearLayout(this).apply {
@@ -109,7 +123,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(dp(6), dp(8), dp(6), dp(8))
-                setOnClickListener { selectCharacter(type) }
+                setOnClickListener { onPetCardClicked(type) }
             }
             card.addView(petView, LinearLayout.LayoutParams(dp(84), dp(84)))
             card.addView(TextView(this).apply {
@@ -118,10 +132,16 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER
                 setTextColor(ink)
             })
+            val label = TextView(this).apply {
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(Color.parseColor("#7A6A73"))
+            }
+            card.addView(label)
             val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             lp.setMargins(dp(4), 0, dp(4), 0)
             row.addView(card, lp)
-            previews.add(Preview(type, petView, card))
+            previews.add(Preview(type, petView, card, label))
         }
         root.addView(row)
 
@@ -234,20 +254,42 @@ class MainActivity : Activity() {
             }
         })
 
+        privacyButton = Button(this).apply {
+            text = "Privacy and ad settings"
+            visibility = View.GONE
+            setOnClickListener { ads.showPrivacyOptions() }
+        }
+        root.addView(privacyButton)
+
         root.addView(TextView(this).apply {
-            text = "Tip: tap your pet for a reaction, drag and throw it. Pets nap at night and when the battery is low."
+            text = "Tip: tap your pet for a reaction, drag and throw it. Pets nap at night and when the battery is low. " +
+                "Bholu and Jelly unlock by watching short ads or by raising Mochi's level."
             setTextColor(Color.parseColor("#7A6A73"))
             setPadding(0, dp(24), 0, 0)
         })
 
-        setContentView(ScrollView(this).apply { addView(root) })
+        // Android 15+ draws apps edge to edge: keep the content clear of the system bars.
+        val scroll = ScrollView(this).apply {
+            clipToPadding = false
+            addView(root)
+        }
+        scroll.setOnApplyWindowInsetsListener { _, insets ->
+            val bars = systemBarInsets(insets)
+            root.setPadding(pad, bars.first + dp(16), pad, bars.second + pad)
+            insets
+        }
+        setContentView(scroll)
         refreshPicker()
+
+        ads.start()
     }
 
     override fun onResume() {
         super.onResume()
         refreshUi()
+        refreshPicker()
         refreshStats()
+        ads.loadRewarded()
         handler.removeCallbacks(previewTick)
         handler.post(previewTick)
     }
@@ -257,8 +299,30 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
-    private fun selectedCharacter(): CharacterType =
-        CharacterType.fromId(prefs.getString(Prefs.KEY_CHARACTER, null))
+    @Suppress("DEPRECATION")
+    private fun systemBarInsets(insets: WindowInsets): Pair<Int, Int> {
+        return if (Build.VERSION.SDK_INT >= 30) {
+            val bars = insets.getInsets(WindowInsets.Type.systemBars())
+            Pair(bars.top, bars.bottom)
+        } else {
+            Pair(insets.systemWindowInsetTop, insets.systemWindowInsetBottom)
+        }
+    }
+
+    // ---------- pets: select, lock, unlock ----------
+
+    private fun selectedCharacter(): CharacterType {
+        val saved = CharacterType.fromId(prefs.getString(Prefs.KEY_CHARACTER, null))
+        return if (Unlocks.isUnlocked(prefs, saved)) saved else CharacterType.MOCHI
+    }
+
+    private fun onPetCardClicked(type: CharacterType) {
+        if (Unlocks.isUnlocked(prefs, type)) {
+            selectCharacter(type)
+        } else {
+            showUnlockDialog(type)
+        }
+    }
 
     private fun selectCharacter(type: CharacterType) {
         prefs.edit().putString(Prefs.KEY_CHARACTER, type.id).apply()
@@ -268,18 +332,64 @@ class MainActivity : Activity() {
         applyIfRunning()
     }
 
+    private fun showUnlockDialog(type: CharacterType) {
+        val watched = Unlocks.adsWatched(prefs, type)
+        val mochiLevel = PetStats.level(prefs, CharacterType.MOCHI.id)
+        val message = "Watch ${type.adsToUnlock} short ads ($watched/${type.adsToUnlock} done), " +
+            "or raise Mochi to level ${type.unlockLevel} (Mochi is level $mochiLevel now)."
+        AlertDialog.Builder(this)
+            .setTitle("Unlock ${type.displayName}")
+            .setMessage(message)
+            .setPositiveButton(if (ads.isReady) "Watch ad" else "Load ad") { _, _ -> watchAdFor(type) }
+            .setNegativeButton("Not now", null)
+            .show()
+    }
+
+    private fun watchAdFor(type: CharacterType) {
+        if (!ads.isReady) {
+            ads.loadRewarded()
+            Toast.makeText(this, "The ad is loading. Please try again in a few seconds.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        ads.showRewarded(
+            onReward = {
+                val unlocked = Unlocks.recordAdWatched(prefs, type)
+                if (unlocked) {
+                    Toast.makeText(this, "${type.displayName} unlocked!", Toast.LENGTH_LONG).show()
+                    selectCharacter(type)
+                } else {
+                    val left = type.adsToUnlock - Unlocks.adsWatched(prefs, type)
+                    Toast.makeText(this, "Thanks! $left more to unlock ${type.displayName}.", Toast.LENGTH_SHORT).show()
+                }
+                refreshPicker()
+            },
+            onFailed = {
+                Toast.makeText(this, "Could not show an ad right now. Please try again later.", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
     private fun refreshPicker() {
         val selected = selectedCharacter()
         for (p in previews) {
             val isSelected = p.type == selected
+            val unlocked = Unlocks.isUnlocked(prefs, p.type)
             p.card.background = GradientDrawable().apply {
                 cornerRadius = dp(16).toFloat()
                 setColor(if (isSelected) Color.parseColor("#FFE3EC") else Color.TRANSPARENT)
                 setStroke(dp(2), if (isSelected) pink else Color.TRANSPARENT)
             }
+            p.view.alpha = if (unlocked) 1f else 0.4f
+            p.label.text = when {
+                unlocked && p.type.adsToUnlock == 0 -> "Free"
+                unlocked -> "Unlocked"
+                else -> "Locked: ${Unlocks.adsWatched(prefs, p.type)}/${p.type.adsToUnlock} ads"
+            }
         }
         taglineText.text = selected.tagline
     }
+
+    // ---------- stats ----------
 
     private fun progressBar(): ProgressBar {
         val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
@@ -327,6 +437,7 @@ class MainActivity : Activity() {
         if (claim.levelUp > 0) msg += "  Level ${claim.levelUp}!"
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         refreshStats()
+        refreshPicker()
     }
 
     private fun giveTreat() {
@@ -338,6 +449,7 @@ class MainActivity : Activity() {
             Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
         refreshStats()
+        refreshPicker()
     }
 
     private fun refreshUi() {
@@ -347,6 +459,7 @@ class MainActivity : Activity() {
         permissionButton.visibility = if (canDraw) View.GONE else View.VISIBLE
         toggleButton.isEnabled = canDraw
         toggleButton.text = if (running) "Stop pet" else "Start pet"
+        privacyButton.visibility = if (ads.privacyOptionsRequired) View.VISIBLE else View.GONE
         statusText.text = when {
             !canDraw -> "Your pet needs permission to appear over other apps. We never read your screen."
             running -> "$name is on your screen. Go to your home screen and say hi!"

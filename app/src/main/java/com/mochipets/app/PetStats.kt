@@ -56,6 +56,9 @@ object PetStats {
         return (stored - DECAY_PER_HOUR * hours).coerceIn(0f, 100f)
     }
 
+    /** Current level of a pet, from stored XP. */
+    fun level(p: SharedPreferences, id: String): Int = levelForXp(p.getInt("xp_$id", 0))
+
     fun snapshot(p: SharedPreferences, id: String, now: Long): Snapshot {
         val xp = p.getInt("xp_$id", 0)
         val level = levelForXp(xp)
