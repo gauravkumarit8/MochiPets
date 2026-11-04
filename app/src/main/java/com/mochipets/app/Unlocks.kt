@@ -8,6 +8,12 @@ import android.content.SharedPreferences
  */
 object Unlocks {
 
+    /** The pet the user selected, or Mochi if the saved choice is still locked. */
+    fun selected(p: SharedPreferences): CharacterType {
+        val saved = CharacterType.fromId(p.getString(Prefs.KEY_CHARACTER, null))
+        return if (isUnlocked(p, saved)) saved else CharacterType.MOCHI
+    }
+
     fun adsWatched(p: SharedPreferences, type: CharacterType): Int = p.getInt("ads_${type.id}", 0)
 
     fun isUnlocked(p: SharedPreferences, type: CharacterType): Boolean {

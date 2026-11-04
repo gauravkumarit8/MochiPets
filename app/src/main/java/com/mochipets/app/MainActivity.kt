@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var permissionButton: Button
     private lateinit var toggleButton: Button
     private lateinit var privacyButton: Button
+    private lateinit var perchText: TextView
     private lateinit var levelText: TextView
     private lateinit var xpBar: ProgressBar
     private lateinit var happyText: TextView
@@ -209,6 +210,27 @@ class MainActivity : Activity() {
             }
         }
         root.addView(toggleButton)
+
+        // ---- pets on app icons ----
+        root.addView(Button(this).apply {
+            text = "Pet icons for my apps"
+            setOnClickListener { startActivity(Intent(this@MainActivity, AppPickerActivity::class.java)) }
+        })
+        perchText = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.parseColor("#7A6A73"))
+            setPadding(0, dp(2), 0, dp(4))
+        }
+        root.addView(perchText)
+        root.addView(CheckBox(this).apply {
+            text = "Pet walks around the screen"
+            setTextColor(ink)
+            isChecked = prefs.getBoolean(Prefs.KEY_ROAM, true)
+            setOnCheckedChangeListener { _, checked ->
+                prefs.edit().putBoolean(Prefs.KEY_ROAM, checked).apply()
+                applyIfRunning()
+            }
+        })
 
         // size slider: 80..200 dp
         val sizeDp = prefs.getInt(Prefs.KEY_SIZE_DP, Prefs.DEFAULT_SIZE_DP)
@@ -460,6 +482,12 @@ class MainActivity : Activity() {
         toggleButton.isEnabled = canDraw
         toggleButton.text = if (running) "Stop pet" else "Start pet"
         privacyButton.visibility = if (ads.privacyOptionsRequired) View.VISIBLE else View.GONE
+        val perchCount = PerchStore.all(prefs).size
+        perchText.text = if (perchCount == 0) {
+            "No pets on app icons yet."
+        } else {
+            "$perchCount live pet(s) on app icons. Use Pet icons for my apps to change them."
+        }
         statusText.text = when {
             !canDraw -> "Your pet needs permission to appear over other apps. We never read your screen."
             running -> "$name is on your screen. Go to your home screen and say hi!"

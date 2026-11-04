@@ -3,6 +3,7 @@ package com.mochipets.app
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
@@ -22,6 +23,13 @@ class PetView(context: Context) : View(context) {
     var surface: Int = 0
     var squash: Float = 0f
     var character: CharacterType = CharacterType.MOCHI
+    var showShadow: Boolean = true
+    var editMode: Boolean = false
+
+    private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        color = Color.parseColor("#FF8FB1")
+    }
 
     private val bholuRenderer = BholuRenderer()
     private val jellyRenderer = JellyRenderer()
@@ -49,13 +57,22 @@ class PetView(context: Context) : View(context) {
             CharacterType.BHOLU -> drawWithRenderer(canvas, bholuRenderer)
             CharacterType.JELLY -> drawWithRenderer(canvas, jellyRenderer)
         }
+        if (editMode) drawEditRing(canvas)
+    }
+
+    /** Dashed ring that shows a pet can be dragged (used while placing pets on icons). */
+    private fun drawEditRing(canvas: Canvas) {
+        val w = width.toFloat()
+        ringPaint.strokeWidth = w * 0.04f
+        ringPaint.pathEffect = DashPathEffect(floatArrayOf(w * 0.08f, w * 0.06f), 0f)
+        canvas.drawCircle(w / 2f, height / 2f, w * 0.47f, ringPaint)
     }
 
     private fun drawWithRenderer(canvas: Canvas, r: PetRenderer) {
         val w = width.toFloat()
         val h = height.toFloat()
         val dragged = state == PetState.DRAGGED || state == PetState.FALL
-        if (!dragged && surface == 0) {
+        if (showShadow && !dragged && surface == 0) {
             fill.color = cShadow
             rect.set(w * 0.14f, h * 0.90f, w * 0.86f, h * 0.99f)
             canvas.drawOval(rect, fill)
@@ -87,7 +104,7 @@ class PetView(context: Context) : View(context) {
         val loose = dragged || state == PetState.HANG
 
         // ground shadow (not mirrored)
-        if (!dragged && surface == 0) {
+        if (showShadow && !dragged && surface == 0) {
             fill.color = cShadow
             rect.set(w * 0.14f, h * 0.90f, w * 0.86f, h * 0.99f)
             canvas.drawOval(rect, fill)

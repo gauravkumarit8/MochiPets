@@ -4,4 +4,7 @@
     <string name="notif_title">Your pet is on your screen</string>
     <string name="notif_text">Tap to open settings</string>
     <string name="notif_stop">Stop</string>
+    <string name="notif_move">Move pets</string>
+    <string name="notif_lock">Lock pets</string>
+    <string name="notif_text_edit">Drag your pets, then tap Lock pets</string>
 </resources>
