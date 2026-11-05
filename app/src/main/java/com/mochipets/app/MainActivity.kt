@@ -22,6 +22,7 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -140,12 +141,15 @@ class MainActivity : Activity() {
                 setTextColor(Color.parseColor("#7A6A73"))
             }
             card.addView(label)
-            val lp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            val lp = LinearLayout.LayoutParams(dp(100), ViewGroup.LayoutParams.WRAP_CONTENT)
             lp.setMargins(dp(4), 0, dp(4), 0)
             row.addView(card, lp)
             previews.add(Preview(type, petView, card, label))
         }
-        root.addView(row)
+        root.addView(HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+        })
 
         taglineText = TextView(this).apply {
             textSize = 14f

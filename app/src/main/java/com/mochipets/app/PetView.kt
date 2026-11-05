@@ -33,6 +33,7 @@ class PetView(context: Context) : View(context) {
 
     private val bholuRenderer = BholuRenderer()
     private val jellyRenderer = JellyRenderer()
+    private val ghostRenderer = GhostRenderer()
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -56,6 +57,7 @@ class PetView(context: Context) : View(context) {
             CharacterType.MOCHI -> drawMochi(canvas)
             CharacterType.BHOLU -> drawWithRenderer(canvas, bholuRenderer)
             CharacterType.JELLY -> drawWithRenderer(canvas, jellyRenderer)
+            CharacterType.GHOST -> drawWithRenderer(canvas, ghostRenderer)
         }
         if (editMode) drawEditRing(canvas)
     }

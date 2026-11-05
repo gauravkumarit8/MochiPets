@@ -18,7 +18,8 @@ enum class CharacterType(
 ) {
     MOCHI("mochi", "Mochi", "Sleepy white cat. Climbs walls and naps a lot.", true, 1.0f, 0, 0),
     BHOLU("bholu", "Bholu", "Loyal, goofy street dog. Fast on the ground, barks when tapped.", false, 1.15f, 2, 3),
-    JELLY("jelly", "Jelly", "Bouncy slime. Hops around and sticks to walls.", true, 0.85f, 2, 5);
+    JELLY("jelly", "Jelly", "Bouncy slime. Hops around and sticks to walls.", true, 0.85f, 2, 5),
+    GHOST("ghost", "Boo", "Shy little ghost. Floats around and drifts up walls.", true, 0.9f, 3, 8);
 
     companion object {
         fun fromId(id: String?): CharacterType =
