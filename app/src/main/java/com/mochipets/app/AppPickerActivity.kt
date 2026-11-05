@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
@@ -230,15 +231,30 @@ class AppPickerActivity : Activity() {
             .show()
     }
 
+    private fun launcherName(): String {
+        @Suppress("DEPRECATION")
+        val ri = packageManager.resolveActivity(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+            PackageManager.MATCH_DEFAULT_ONLY
+        )
+        return ri?.activityInfo?.packageName ?: "unknown"
+    }
+
     private fun createShortcut(item: AppItem, type: CharacterType) {
+        val details = "Details: launcher ${launcherName()}, Android ${Build.VERSION.SDK_INT}."
         val sm = getSystemService(ShortcutManager::class.java)
         if (sm == null || !sm.isRequestPinShortcutSupported) {
-            toast("Your launcher does not support adding shortcuts. Try placing a live pet instead.")
+            showResult(
+                "Your launcher can't add shortcuts",
+                "Your home screen app does not let other apps add icons to it. " +
+                    "Use Place a live pet on this app's icon instead.\n\n$details",
+                null
+            )
             return
         }
         val launch = packageManager.getLaunchIntentForPackage(item.pkg)
         if (launch == null) {
-            toast("This app cannot be opened from a shortcut.")
+            showResult("Can't make this shortcut", "${item.label} cannot be opened from a shortcut.", null)
             return
         }
         val bitmap = PetIcon.compose(this, item.icon, type)
@@ -247,29 +263,95 @@ class AppPickerActivity : Activity() {
             .setIcon(Icon.createWithBitmap(bitmap))
             .setIntent(launch)
             .build()
-        if (sm.requestPinShortcut(info, null)) {
-            toast("Confirm the Add to home screen prompt from your launcher.")
+        val accepted = sm.requestPinShortcut(info, null)
+        if (accepted) {
+            showResult(
+                "Shortcut requested",
+                "This is the icon that will be added. Your home screen app should now ask you to add it. " +
+                    "Tap Add (or Add automatically).\n\n" +
+                    "If you do not see a prompt within a few seconds, your launcher blocked it. " +
+                    "Use Place a live pet on this app's icon instead.\n\n$details",
+                bitmap
+            )
         } else {
-            toast("Your launcher did not accept the shortcut.")
+            showResult(
+                "Launcher did not accept the shortcut",
+                "Use Place a live pet on this app's icon instead.\n\n$details",
+                bitmap
+            )
         }
     }
 
     private fun placeLivePet(item: AppItem, type: CharacterType) {
         if (!Settings.canDrawOverlays(this)) {
-            toast("First allow Display over other apps on the main screen of Mochi Pets.")
+            showResult(
+                "Permission needed",
+                "First allow Display over other apps for Mochi Pets. You can do that on the main screen.",
+                null
+            )
             return
         }
         val perch = Perch(item.pkg, item.pkg, item.label, type, 0.5f, 0.5f)
         if (!PerchStore.put(prefs, perch)) {
-            toast("You can place up to ${PerchStore.MAX_PERCHES} live pets. Remove one first.")
+            showResult(
+                "Too many live pets",
+                "You can place up to ${PerchStore.MAX_PERCHES} live pets. Remove one first.",
+                null
+            )
             return
         }
         ContextCompat.startForegroundService(
             this,
             Intent(this, PetOverlayService::class.java).setAction(PetOverlayService.ACTION_EDIT)
         )
-        toast("Go to your home screen and drag the pet onto the icon. Tap Lock pets in the notification when done.")
-        finish()
+        adapter.notifyDataSetChanged()
+        showResult(
+            "Live ${type.displayName} placed on ${item.label}",
+            "1. Tap Go to home screen.\n" +
+                "2. Find the small pet with the dashed pink ring (it starts in the middle of the screen) " +
+                "and drag it onto the ${item.label} icon.\n" +
+                "3. Pull down the notification shade and tap Lock pets.\n\n" +
+                "If you do not see the notification, the pet locks itself after 1 minute.",
+            null,
+            "Go to home screen"
+        ) {
+            startActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
+
+    /** A clear result message: dialogs are much harder to miss than toasts. */
+    private fun showResult(
+        title: String,
+        message: String,
+        preview: Bitmap?,
+        extraLabel: String? = null,
+        extraAction: (() -> Unit)? = null
+    ) {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), 0)
+        }
+        if (preview != null) {
+            val lp = LinearLayout.LayoutParams(dp(96), dp(96))
+            lp.gravity = Gravity.CENTER_HORIZONTAL
+            lp.bottomMargin = dp(10)
+            box.addView(ImageView(this).apply { setImageBitmap(preview) }, lp)
+        }
+        box.addView(TextView(this).apply {
+            text = message
+            textSize = 15f
+            setTextColor(ink)
+        })
+        val builder = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("OK", null)
+        if (extraLabel != null && extraAction != null) {
+            builder.setNeutralButton(extraLabel) { _, _ -> extraAction() }
+        }
+        builder.show()
     }
 
     private fun removeLivePet(item: AppItem) {
